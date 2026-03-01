@@ -8,14 +8,20 @@ const Layout = ({ children }) => {
   
   const menuItems = [
     { path: '/dashboard', icon: '🏠', label: 'Dashboard' },
+    { path: '/analytics', icon: '📊', label: 'Analytics' },
     { path: '/products', icon: '📦', label: 'Products' },
     { path: '/categories', icon: '📁', label: 'Categories' },
     { path: '/suppliers', icon: '🤝', label: 'Suppliers' },
+    { path: '/customers', icon: '👥', label: 'Customers' },
+    { path: '/warehouses', icon: '🏢', label: 'Warehouses' },
     { path: '/purchase-orders', icon: '📋', label: 'Purchase Orders' },
     { path: '/sales', icon: '💰', label: 'Sales' },
-    { path: '/inventory', icon: '📊', label: 'Inventory' },
-    { path: '/reports', icon: '📈', label: 'Reports' },
+    { path: '/inventory', icon: '📈', label: 'Inventory' },
+    { path: '/promotions', icon: '🎯', label: 'Promotions' },
+    { path: '/bulk-operations', icon: '⚡', label: 'Bulk Operations' },
+    { path: '/reports', icon: '📋', label: 'Reports' },
     { path: '/profile', icon: '👤', label: 'Profile' },
+    { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
 
   const handleLogout = () => {

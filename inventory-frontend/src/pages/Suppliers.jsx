@@ -29,6 +29,7 @@ const Suppliers = () => {
   });
 
   useEffect(() => {
+    console.log('🚀 Suppliers component mounted');
     fetchSuppliers();
   }, []);
 
@@ -39,10 +40,19 @@ const Suppliers = () => {
   const fetchSuppliers = async () => {
     try {
       setError(null);
+      console.log('🔄 Fetching suppliers...');
+      console.log('🔑 Token exists:', !!localStorage.getItem('access_token'));
+      
       const response = await supplierAPI.getAll();
-      console.log('API Response:', response.data);
-      setSuppliers(response.data.results || response.data || []);
+      console.log('📦 API Response:', response.data);
+      
+      const suppliersData = response.data.results || response.data || [];
+      console.log('📊 Suppliers data:', suppliersData);
+      console.log('📈 Suppliers count:', suppliersData.length);
+      
+      setSuppliers(suppliersData);
     } catch (err) {
+      console.error('❌ Fetch suppliers error:', err);
       const apiError = handleApiError(err);
       setError(apiError.message);
     } finally {

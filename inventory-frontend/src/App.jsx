@@ -15,6 +15,7 @@ import Sales from './pages/Sales';
 import Inventory from './pages/Inventory';
 import Reports from './pages/Reports';
 import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 
 // Extended Features Pages
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
@@ -109,6 +110,11 @@ function App() {
         <Route path="/profile" element={
           <ProtectedRoute>
             <Profile />
+          </ProtectedRoute>
+        } />
+        <Route path="/settings" element={
+          <ProtectedRoute>
+            <Settings />
           </ProtectedRoute>
         } />
         
