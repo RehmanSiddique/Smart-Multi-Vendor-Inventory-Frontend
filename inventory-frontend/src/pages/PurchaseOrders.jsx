@@ -53,10 +53,11 @@ const PurchaseOrders = () => {
   };
 
   const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleItemChange = (index, field, value) => {
@@ -81,11 +82,13 @@ const PurchaseOrders = () => {
     e.preventDefault();
     try {
       const payload = {
-        ...formData,
+        supplier: Array.isArray(formData.supplier) ? formData.supplier[0] : formData.supplier,
+        expected_date: Array.isArray(formData.expected_date) ? formData.expected_date[0] : formData.expected_date,
+        notes: Array.isArray(formData.notes) ? formData.notes[0] : formData.notes,
         shipping_cost: parseFloat(formData.shipping_cost) || 0,
         tax: parseFloat(formData.tax) || 0,
         items: formData.items.map(item => ({
-          ...item,
+          product: Array.isArray(item.product) ? item.product[0] : item.product,
           quantity: parseInt(item.quantity),
           unit_price: parseFloat(item.unit_price)
         }))

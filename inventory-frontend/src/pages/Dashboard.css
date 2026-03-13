@@ -1,6 +1,14 @@
 /* Dashboard.css */
 .dashboard-header {
   margin-bottom: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+}
+
+.dashboard-header > div {
+  flex: 1;
 }
 
 .dashboard-header h1 {

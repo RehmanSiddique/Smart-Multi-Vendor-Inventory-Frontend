@@ -1,18 +1,97 @@
-# React + Vite
+# Smart Multi-Vendor Inventory System — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern, responsive inventory management dashboard built with **React + Vite**. Supports multi-vendor SaaS architecture with real-time analytics, CRUD for all entities, and a premium UI design.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 🚀 Tech Stack
 
-## React Compiler
+| Layer       | Technology                     |
+|-------------|-------------------------------|
+| Framework   | React 18 + Vite                |
+| Routing     | React Router v6                |
+| HTTP Client | Axios                          |
+| Charts      | Chart.js + react-chartjs-2     |
+| Icons       | react-icons (Feather set)      |
+| Styling     | Vanilla CSS + CSS variables    |
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+---
 
-Note: This will impact Vite dev & build performances.
+## 📁 Project Structure
 
-## Expanding the ESLint configuration
+```
+inventory-frontend/
+├── public/
+├── src/
+│   ├── components/        # Reusable UI components (Layout, Sidebar, Navbar)
+│   ├── pages/             # One file per route
+│   │   ├── Dashboard.jsx
+│   │   ├── Products.jsx
+│   │   ├── Sales.jsx
+│   │   ├── Inventory.jsx
+│   │   ├── Customers.jsx
+│   │   ├── PurchaseOrders.jsx
+│   │   ├── Suppliers.jsx
+│   │   ├── Reports.jsx
+│   │   ├── AnalyticsDashboard.jsx
+│   │   └── ...
+│   ├── services/
+│   │   ├── api.js         # Core API service (auth, products, sales, inventory)
+│   │   └── extendedApi.js # Extended API (analytics, customers, warehouses, bulk)
+│   ├── styles/            # Global and component-level stylesheets
+│   └── App.jsx            # Root router
+├── .env.example
+├── package.json
+└── vite.config.js
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+## ⚡ Quick Setup
+
+### 1. Install dependencies
+```bash
+cd inventory-frontend
+npm install
+```
+
+### 2. Configure environment
+```bash
+cp .env.example .env
+# Set VITE_API_URL to point to your backend
+```
+
+### 3. Start dev server
+```bash
+npm run dev
+```
+
+Available at `http://localhost:5173`
+
+---
+
+## 🛠️ Key Features
+
+- **Authentication**: JWT-based login with protected routes
+- **Dashboard**: Real-time stats — total products, low stock, today's revenue, recent sales
+- **Analytics**: Charts for sales trends, revenue, category distribution, top products
+- **Products**: Full CRUD with category, supplier association and stock tracking
+- **Sales**: Create, view, and manage sales orders with inventory auto-adjustment
+- **Purchase Orders**: Full receive workflow (receive all / receive individual items)
+- **Customers**: Full CRUD with purchase history
+- **Inventory**: Stock level monitoring with low stock and out-of-stock badges
+- **Reports**: Time-range selectable charts (Daily / Weekly / Monthly / Yearly)
+
+---
+
+## 🌐 Environment Variables
+
+| Variable      | Description                         | Default                    |
+|---------------|-------------------------------------|----------------------------|
+| VITE_API_URL  | Backend API base URL                | http://localhost:8000      |
+
+---
+
+## 📄 License
+
+MIT

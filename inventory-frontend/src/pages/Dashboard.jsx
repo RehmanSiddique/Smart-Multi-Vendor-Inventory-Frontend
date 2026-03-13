@@ -16,23 +16,60 @@ const Dashboard = () => {
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
+  const seedSampleData = async () => {
+    try {
+      setSeeding(true);
+      const response = await fetch('/api/v1/inventory/seed-sample-data/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Sample data created:', data);
+        setTimeout(() => fetchDashboardData(), 500);
+      } else {
+        console.error('❌ Failed to seed data');
+      }
+    } catch (err) {
+      console.error('❌ Error seeding data:', err);
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      console.log('📊 Fetching dashboard data...');
+      
       const [productsRes, lowStockRes, salesRes] = await Promise.all([
         productAPI.getAll(),
         productAPI.getLowStock(),
         saleAPI.getToday(),
       ]);
 
+      console.log('📦 Products response:', productsRes.data);
+      console.log('⚠️ Low stock response:', lowStockRes.data);
+      console.log('💰 Sales response:', salesRes.data);
+
       const products = productsRes.data.results || productsRes.data || [];
       const lowStock = lowStockRes.data.results || lowStockRes.data || [];
       const sales = salesRes.data.results || salesRes.data || [];
+
+      console.log('📊 Processed data:');
+      console.log('  - Products:', products.length);
+      console.log('  - Low stock:', lowStock.length);
+      console.log('  - Sales:', sales.length);
 
       const outOfStock = products.filter(p => (p.inventory?.quantity || 0) === 0).length;
       const todayRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.total || 0), 0);
@@ -47,11 +84,13 @@ const Dashboard = () => {
 
       setLowStockProducts(lowStock.slice(0, 5));
       setRecentSales(sales.slice(0, 5));
+      
+      console.log('✅ Dashboard data loaded successfully');
       setError(null);
     } catch (err) {
       const apiError = handleApiError(err);
       setError(apiError.message);
-      console.error('Error fetching dashboard data:', apiError);
+      console.error('❌ Error fetching dashboard data:', apiError);
     } finally {
       setLoading(false);
     }
@@ -78,8 +117,20 @@ const Dashboard = () => {
   return (
     <Layout>
       <div className="dashboard-header">
-        <h1>Dashboard</h1>
-        <p>Welcome back! Here's what's happening with your inventory.</p>
+        <div>
+          <h1>Dashboard</h1>
+          <p>Welcome back! Here's what's happening with your inventory.</p>
+        </div>
+        {stats.totalProducts === 0 && (
+          <button 
+            onClick={seedSampleData} 
+            disabled={seeding}
+            className="btn btn-primary"
+            style={{ marginTop: '10px' }}
+          >
+            {seeding ? 'Creating Sample Data...' : 'Load Sample Data'}
+          </button>
+        )}
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}

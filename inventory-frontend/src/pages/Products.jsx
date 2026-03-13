@@ -25,6 +25,14 @@ const Products = () => {
     fetchData();
   }, []);
 
+  // Debug effect to log data when it changes
+  useEffect(() => {
+    if (products.length > 0 && categories.length > 0) {
+      console.log('📊 Products loaded:', products.length);
+      console.log('📊 Categories loaded:', categories.length);
+    }
+  }, [products, categories]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -46,11 +54,15 @@ const Products = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    console.log(`🔄 Input change - ${name}:`, value, `(type: ${typeof value})`);
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Debug: Log form data before processing
+    console.log('🔍 Raw form data:', formData);
     
     const payload = {
       name: formData.name.trim(),
@@ -59,39 +71,77 @@ const Products = () => {
       description: formData.description?.trim() || ''
     };
     
-    // Add category if selected
-    if (formData.category && formData.category !== '') {
-      payload.category = parseInt(formData.category);
+    // CRITICAL FIX: Handle category with explicit type conversion
+    if (formData.category && formData.category !== '' && formData.category !== 'null') {
+      let categoryValue = formData.category;
+      
+      // If it's an array (shouldn't happen but let's be safe)
+      if (Array.isArray(categoryValue)) {
+        categoryValue = categoryValue[0];
+        console.log('⚠️ Fixed array category:', categoryValue);
+      }
+      
+      // Convert to integer
+      const categoryId = parseInt(categoryValue, 10);
+      
+      if (!isNaN(categoryId) && categoryId > 0) {
+        // Ensure it's a plain integer, not an array or object
+        payload.category = categoryId;
+        console.log('✅ Category set as integer:', categoryId);
+      } else {
+        console.log('❌ Invalid category value:', categoryValue);
+      }
+    }
+    
+    // Final payload validation
+    console.log('📦 Final payload:', payload);
+    console.log('📦 Category type check:', typeof payload.category);
+    
+    // Double-check that category is not an array
+    if (payload.category && Array.isArray(payload.category)) {
+      console.error('🚨 CRITICAL: Category is still an array!', payload.category);
+      payload.category = parseInt(payload.category[0], 10);
+      console.log('🔧 Fixed to:', payload.category);
     }
     
     try {
       if (editingProduct) {
-        await productAPI.update(editingProduct.id, payload);
+        const response = await productAPI.update(editingProduct.id, payload);
+        console.log('✅ Product updated:', response.data);
       } else {
-        await productAPI.create(payload);
+        const response = await productAPI.create(payload);
+        console.log('✅ Product created:', response.data);
       }
       setShowForm(false);
       setEditingProduct(null);
       setFormData({ name: '', sku: '', price: '', category: '', description: '' });
-      fetchData();
+      await fetchData();
     } catch (err) {
+      console.error('❌ Product submit error:', err);
+      console.error('❌ Error response:', err.response?.data);
       const apiError = handleApiError(err);
       alert(`Error: ${apiError.message}`);
     }
   };
 
   const handleEdit = (product) => {
+    console.log('🔧 Editing product:', product);
     setEditingProduct(product);
     
     // Handle category properly - extract ID if it's an object or array
     let categoryValue = '';
     if (product.category) {
+      console.log('🔍 Product category type:', typeof product.category, product.category);
+      
       if (Array.isArray(product.category)) {
         categoryValue = product.category[0]?.id || product.category[0] || '';
+        console.log('⚠️ Category is array, extracted:', categoryValue);
       } else if (typeof product.category === 'object' && product.category !== null) {
         categoryValue = product.category.id || '';
+        console.log('📝 Category is object, extracted ID:', categoryValue);
       } else {
         categoryValue = product.category;
+        console.log('🔢 Category is primitive:', categoryValue);
       }
     }
     
@@ -99,9 +149,11 @@ const Products = () => {
       name: product.name || '',
       sku: product.sku || '',
       price: product.price || '',
-      category: String(categoryValue),
+      category: String(categoryValue), // Ensure it's always a string
       description: product.description || '',
     };
+    
+    console.log('📝 Form data to set:', formDataToSet);
     
     setFormData(formDataToSet);
     setShowForm(true);
@@ -121,13 +173,24 @@ const Products = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure?')) return;
+    if (!window.confirm('Are you sure you want to delete this product?')) return;
     try {
       await productAPI.delete(id);
       fetchData();
     } catch (err) {
       const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
+      
+      // Check if it's the specific error about products with sales
+      if (err.response?.status === 400 && err.response?.data?.error?.includes('Cannot delete product that has been sold')) {
+        alert(
+          'Cannot Delete Product\n\n' +
+          'This product cannot be deleted because it appears in sales records. ' +
+          'To maintain data integrity, products with sales history must be preserved.\n\n' +
+          'Suggestion: You can mark this product as inactive to hide it from listings.'
+        );
+      } else {
+        alert(`Error deleting product: ${apiError.message}`);
+      }
     }
   };
 
@@ -142,8 +205,13 @@ const Products = () => {
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           p.sku?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === '' || p.category == selectedCategory;
+    
+    // Category comparison - both should be integers now
+    const matchesCategory = selectedCategory === '' || 
+                           String(p.category) === String(selectedCategory);
+    
     const matchesLowStock = !showLowStock || (p.inventory?.quantity || 0) <= (p.inventory?.reorder_level || 0);
+    
     return matchesSearch && matchesCategory && matchesLowStock;
   });
 

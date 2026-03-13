@@ -18,6 +18,18 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Debug: Log request data for POST requests
+    if (config.method === 'post' && config.url.includes('/products/')) {
+      console.log('🚀 API Request Debug:', {
+        url: config.url,
+        method: config.method,
+        data: config.data,
+        dataType: typeof config.data,
+        categoryType: config.data?.category ? typeof config.data.category : 'undefined'
+      });
+    }
+    
     return config;
   },
   (error) => {
@@ -101,8 +113,17 @@ export const categoryAPI = {
 export const productAPI = {
   getAll: (params = {}) => api.get('/inventory/products/', { params }),
   getById: (id) => api.get(`/inventory/products/${id}/`),
-  create: (data) => api.post('/inventory/products/', data),
-  update: (id, data) => api.put(`/inventory/products/${id}/`, data),
+  create: (data) => {
+    // Ensure clean data serialization
+    const cleanData = JSON.parse(JSON.stringify(data));
+    console.log('🧼 Clean data for API:', cleanData);
+    return api.post('/inventory/products/', cleanData);
+  },
+  update: (id, data) => {
+    // Ensure clean data serialization
+    const cleanData = JSON.parse(JSON.stringify(data));
+    return api.put(`/inventory/products/${id}/`, cleanData);
+  },
   delete: (id) => api.delete(`/inventory/products/${id}/`),
   getInventory: (id) => api.get(`/inventory/products/${id}/inventory/`),
   getLowStock: () => api.get('/inventory/products/low_stock/'),

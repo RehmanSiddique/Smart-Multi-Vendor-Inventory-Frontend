@@ -37,6 +37,8 @@ const Categories = () => {
       setLoading(true);
       const response = await categoryAPI.getAll();
       const data = response.data.results || response.data || [];
+      console.log('📦 Categories loaded from API:', data);
+      console.log('📦 Category IDs:', data.map(c => ({ id: c.id, name: c.name })));
       setCategories(data);
       setError(null);
     } catch (err) {
@@ -64,21 +66,33 @@ const Categories = () => {
       is_active: formData.is_active
     };
     
-    if (formData.parent && formData.parent !== '') {
-      payload.parent = parseInt(formData.parent);
+    // Only add parent if it's a valid number
+    if (formData.parent && formData.parent !== '' && formData.parent !== 'null') {
+      const parentId = parseInt(formData.parent);
+      if (!isNaN(parentId) && parentId > 0) {
+        payload.parent = parentId;
+      }
     }
+    
+    console.log('Submitting category:', payload);
     
     try {
       if (editingCategory) {
         await categoryAPI.update(editingCategory.id, payload);
       } else {
-        await categoryAPI.create(payload);
+        const response = await categoryAPI.create(payload);
+        console.log('Category created:', response.data);
       }
+      
+      // Reset form and state
       setShowForm(false);
       setEditingCategory(null);
       setFormData({ name: '', description: '', parent: '', is_active: true });
-      fetchCategories();
+      
+      // Refresh categories list
+      await fetchCategories();
     } catch (err) {
+      console.error('Category submit error:', err);
       const apiError = handleApiError(err);
       alert(`Error: ${apiError.message}`);
     }
@@ -371,11 +385,13 @@ const Categories = () => {
                   onChange={handleInputChange}
                 >
                   <option value="">None (Top Level)</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
+                  {categories
+                    .filter(cat => !editingCategory || cat.id !== editingCategory.id)
+                    .map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
