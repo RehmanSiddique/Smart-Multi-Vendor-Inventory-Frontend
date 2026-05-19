@@ -1,0 +1,201 @@
+/* Sales.css - Focused Workbench & Wizard Styles */
+
+.sales-page {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.wizard-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  margin-bottom: var(--sp-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.wizard-header {
+  padding: var(--sp-lg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--secondary-light);
+}
+
+.wizard-steps-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+}
+
+.step-bubble {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.step-bubble.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.step-bubble.complete {
+  background: var(--success);
+  color: white;
+  border-color: var(--success);
+}
+
+.step-line {
+  width: 20px;
+  height: 2px;
+  background: var(--border);
+}
+
+.wizard-body {
+  padding: var(--sp-xl);
+  min-height: 300px;
+}
+
+.wizard-footer {
+  padding: var(--sp-lg) var(--sp-xl);
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--border-light);
+  background: var(--surface);
+}
+
+/* Step Content Styles */
+.step-title-wb {
+  display: block;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: var(--sp-sm);
+}
+
+.step-desc-wb {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-lg);
+}
+
+/* Grid for forms */
+.wizard-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-lg);
+}
+
+.form-group-wb {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+}
+
+.label-wb {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-light);
+  letter-spacing: 0.05em;
+}
+
+.input-wb {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.input-wb:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+/* Review Summary */
+.review-summary-wb {
+  background: var(--secondary-light);
+  border-radius: var(--radius-md);
+  padding: var(--sp-lg);
+}
+
+.review-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.review-row:last-child {
+  border-bottom: none;
+}
+
+.review-label {
+  font-size: 0.8125rem;
+  color: var(--text-light);
+  font-weight: 500;
+}
+
+.review-value {
+  font-size: 0.8125rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.total-review-wb {
+  margin-top: var(--sp-md);
+  padding-top: var(--sp-md);
+  border-top: 2px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.total-label-wb {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.total-value-wb {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .wizard-form-grid { grid-template-columns: 1fr; }
+}
+
+/* Data Table Integration */
+.sales-ledger-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.invoice-id-wb {
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}

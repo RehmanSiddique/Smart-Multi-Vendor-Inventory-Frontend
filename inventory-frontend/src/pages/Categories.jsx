@@ -1,575 +1,167 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout';
-import { categoryAPI, productAPI, handleApiError } from '../services/api';
-import './Categories.css';
+import { categoryAPI, handleApiError } from '../services/api';
+import './Products.css';
 
 const Categories = () => {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [viewMode, setViewMode] = useState('table'); // 'table' or 'tree'
-  
-  // Search and Filter states
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showActiveOnly, setShowActiveOnly] = useState(false);
-  const [parentFilter, setParentFilter] = useState('');
-  
-  // Bulk actions
-  const [selectedCategories, setSelectedCategories] = useState([]);
-  const [showBulkActions, setShowBulkActions] = useState(false);
-  
-  // Form data
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    parent: '',
-    is_active: true,
-  });
+    const queryClient = useQueryClient();
+    const [showForm, setShowForm] = useState(false);
+    const [editingCategory, setEditingCategory] = useState(null);
+    const [page, setPage] = useState(1);
+    const limit = 20;
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
-    try {
-      setLoading(true);
-      const response = await categoryAPI.getAll();
-      const data = response.data.results || response.data || [];
-      console.log('📦 Categories loaded from API:', data);
-      console.log('📦 Category IDs:', data.map(c => ({ id: c.id, name: c.name })));
-      setCategories(data);
-      setError(null);
-    } catch (err) {
-      const apiError = handleApiError(err);
-      setError(apiError.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    const payload = {
-      name: formData.name.trim(),
-      description: formData.description?.trim() || '',
-      is_active: formData.is_active
-    };
-    
-    // Only add parent if it's a valid number
-    if (formData.parent && formData.parent !== '' && formData.parent !== 'null') {
-      const parentId = parseInt(formData.parent);
-      if (!isNaN(parentId) && parentId > 0) {
-        payload.parent = parentId;
-      }
-    }
-    
-    console.log('Submitting category:', payload);
-    
-    try {
-      if (editingCategory) {
-        await categoryAPI.update(editingCategory.id, payload);
-      } else {
-        const response = await categoryAPI.create(payload);
-        console.log('Category created:', response.data);
-      }
-      
-      // Reset form and state
-      setShowForm(false);
-      setEditingCategory(null);
-      setFormData({ name: '', description: '', parent: '', is_active: true });
-      
-      // Refresh categories list
-      await fetchCategories();
-    } catch (err) {
-      console.error('Category submit error:', err);
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const handleEdit = (category) => {
-    setEditingCategory(category);
-    
-    let parentValue = '';
-    if (category.parent) {
-      if (Array.isArray(category.parent)) {
-        parentValue = category.parent[0]?.id || category.parent[0] || '';
-      } else if (typeof category.parent === 'object' && category.parent !== null) {
-        parentValue = category.parent.id || '';
-      } else {
-        parentValue = category.parent;
-      }
-    }
-    
-    setFormData({
-      name: category.name || '',
-      description: category.description || '',
-      parent: String(parentValue),
-      is_active: category.is_active !== false,
+    const [formData, setFormData] = useState({
+        name: '', description: '', parent: '', is_active: true
     });
-    setShowForm(true);
-  };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this category?')) return;
-    try {
-      await categoryAPI.delete(id);
-      fetchCategories();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
+    const { data: categoryRes, isLoading } = useQuery({
+        queryKey: ['categories', page],
+        queryFn: () => categoryAPI.getAll({ page, limit }),
+        keepPreviousData: true,
+    });
 
-  const handleDuplicate = async (category) => {
-    const payload = {
-      name: `${category.name} (Copy)`,
-      description: category.description || '',
-      parent: category.parent || null,
-      is_active: true
+    const categories = categoryRes?.data?.results || categoryRes?.data || [];
+    const totalCount = categoryRes?.data?.count || 0;
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const saveMutation = useMutation({
+        mutationFn: (payload) => editingCategory ? categoryAPI.update(editingCategory.id, payload) : categoryAPI.create(payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['categories']);
+            setShowForm(false);
+            setEditingCategory(null);
+            resetForm();
+        },
+        onError: (err) => alert(`Save failed: ${handleApiError(err).message}`)
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id) => categoryAPI.delete(id),
+        onSuccess: () => queryClient.invalidateQueries(['categories']),
+    });
+
+    const resetForm = () => {
+        setFormData({ name: '', description: '', parent: '', is_active: true });
     };
-    
-    try {
-      await categoryAPI.create(payload);
-      fetchCategories();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
 
-  const toggleCategoryStatus = async (id) => {
-    const category = categories.find(c => c.id === id);
-    if (!category) return;
-    
-    try {
-      await categoryAPI.update(id, { is_active: !category.is_active });
-      fetchCategories();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
+    const handleEdit = (c) => {
+        setEditingCategory(c);
+        setFormData({ name: c.name || '', description: c.description || '', parent: c.parent || '', is_active: c.is_active !== false });
+        setShowForm(true);
+    };
 
-  const handleBulkDelete = async () => {
-    if (!window.confirm(`Delete ${selectedCategories.length} categories?`)) return;
-    
-    try {
-      await Promise.all(selectedCategories.map(id => categoryAPI.delete(id)));
-      setSelectedCategories([]);
-      fetchCategories();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const handleBulkToggleStatus = async (status) => {
-    try {
-      await Promise.all(selectedCategories.map(id => 
-        categoryAPI.update(id, { is_active: status })
-      ));
-      setSelectedCategories([]);
-      fetchCategories();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const handleSelectAll = (checked) => {
-    if (checked) {
-      setSelectedCategories(filteredCategories.map(c => c.id));
-    } else {
-      setSelectedCategories([]);
-    }
-  };
-
-  const handleSelectCategory = (id, checked) => {
-    if (checked) {
-      setSelectedCategories(prev => [...prev, id]);
-    } else {
-      setSelectedCategories(prev => prev.filter(cId => cId !== id));
-    }
-  };
-
-  const exportCategories = () => {
-    const csvContent = [
-      ['Name', 'Description', 'Parent', 'Products', 'Status'],
-      ...filteredCategories.map(c => [
-        c.name,
-        c.description || '',
-        c.parent_name || '',
-        c.product_count || 0,
-        c.is_active ? 'Active' : 'Inactive'
-      ])
-    ].map(row => row.join(',')).join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'categories.csv';
-    a.click();
-  };
-
-  const clearFilters = () => {
-    setSearchTerm('');
-    setShowActiveOnly(false);
-    setParentFilter('');
-  };
-
-  // Filter categories
-  const filteredCategories = categories.filter(c => {
-    const matchesSearch = c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         c.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesActive = !showActiveOnly || c.is_active;
-    const matchesParent = parentFilter === '' || c.parent == parentFilter;
-    return matchesSearch && matchesActive && matchesParent;
-  });
-
-  // Tree view component
-  const CategoryTree = ({ categories, level = 0 }) => {
-    const topLevel = categories.filter(c => !c.parent);
-    
     return (
-      <div className="category-tree">
-        {topLevel.map(category => (
-          <CategoryTreeNode 
-            key={category.id} 
-            category={category} 
-            categories={categories}
-            level={level}
-          />
-        ))}
-      </div>
-    );
-  };
+        <Layout>
+            <div className="products-page">
+                <header className="page-header-wb">
+                    <div className="header-title-area">
+                        <h1>Product <span className="text-primary">Categories</span></h1>
+                        <p className="text-secondary">{totalCount} categories defined</p>
+                    </div>
+                    <button className="btn-workbench btn-primary-wb" onClick={() => { resetForm(); setEditingCategory(null); setShowForm(true); }}>
+                        ➕ Add Category
+                    </button>
+                </header>
 
-  const CategoryTreeNode = ({ category, categories, level }) => {
-    const children = categories.filter(c => c.parent === category.id);
-    const [expanded, setExpanded] = useState(true);
-    
-    return (
-      <div className="tree-node">
-        <div 
-          className="tree-item" 
-          style={{ marginLeft: `${level * 20}px` }}
-        >
-          {children.length > 0 && (
-            <button 
-              className="tree-toggle"
-              onClick={() => setExpanded(!expanded)}
-            >
-              {expanded ? '▼' : '▶'}
-            </button>
-          )}
-          <span className="tree-name">{category.name}</span>
-          <span className="tree-count">({category.product_count || 0})</span>
-          <div className="tree-actions">
-            <button className="btn-icon" onClick={() => handleEdit(category)}>✏️</button>
-            <button className="btn-icon" onClick={() => handleDelete(category.id)}>🗑️</button>
-          </div>
-        </div>
-        {expanded && children.length > 0 && (
-          <div className="tree-children">
-            {children.map(child => (
-              <CategoryTreeNode
-                key={child.id}
-                category={child}
-                categories={categories}
-                level={level + 1}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
+                {showForm && (
+                    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false); }}>
+                        <div className="modal-content">
+                            <div className="modal-header">
+                                <div>
+                                    <h2>{editingCategory ? 'Edit Category' : 'Add New Category'}</h2>
+                                    <p>Define a product classification.</p>
+                                </div>
+                                <button className="modal-close-btn" onClick={() => setShowForm(false)}>✕</button>
+                            </div>
+                            <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(formData); }}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                    <div className="form-group-wb">
+                                        <label className="label-wb">Category Name</label>
+                                        <input className="input-wb" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                                    </div>
+                                    <div className="form-group-wb">
+                                        <label className="label-wb">Parent Category</label>
+                                        <select className="input-wb" value={formData.parent} onChange={e => setFormData({...formData, parent: e.target.value})}>
+                                            <option value="">None (Top Level)</option>
+                                            {categories.filter(c => c.id !== editingCategory?.id).map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="form-group-wb mb-6">
+                                    <label className="label-wb">Description</label>
+                                    <textarea className="input-wb w-full" rows="2" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Brief description..." />
+                                </div>
+                                <div className="modal-footer">
+                                    <button type="button" className="btn-workbench btn-secondary-wb" onClick={() => setShowForm(false)}>Cancel</button>
+                                    <button type="submit" className="btn-workbench btn-primary-wb" disabled={saveMutation.isPending}>
+                                        {editingCategory ? 'Save Changes' : 'Add Category'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
 
-  if (loading) {
-    return (
-      <Layout>
-        <div className="loading-container">
-          <div className="spinner"></div>
-          <p>Loading categories...</p>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="alert alert-danger">{error}</div>
-      </Layout>
-    );
-  }
-
-  return (
-    <Layout>
-      <div className="page-header">
-        <div>
-          <h1>Categories</h1>
-          <p>Organize your products with categories</p>
-        </div>
-        <div className="header-actions">
-          <button className="btn btn-outline" onClick={exportCategories}>
-            📊 Export
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setShowForm(!showForm);
-              setEditingCategory(null);
-              setFormData({ name: '', description: '', parent: '', is_active: true });
-            }}
-          >
-            {showForm ? '✕ Close' : '+ Add Category'}
-          </button>
-        </div>
-      </div>
-
-      {/* Bulk Actions Bar */}
-      {selectedCategories.length > 0 && (
-        <div className="bulk-actions-bar">
-          <span>{selectedCategories.length} selected</span>
-          <div className="bulk-actions">
-            <button className="btn btn-sm" onClick={() => handleBulkToggleStatus(true)}>
-              Activate
-            </button>
-            <button className="btn btn-sm" onClick={() => handleBulkToggleStatus(false)}>
-              Deactivate
-            </button>
-            <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
-              Delete
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Form */}
-      {showForm && (
-        <div className="card form-card">
-          <h3>{editingCategory ? 'Edit Category' : 'New Category'}</h3>
-          <form onSubmit={handleSubmit}>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Category Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  className="form-input"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Parent Category</label>
-                <select
-                  name="parent"
-                  className="form-select"
-                  value={formData.parent}
-                  onChange={handleInputChange}
-                >
-                  <option value="">None (Top Level)</option>
-                  {categories
-                    .filter(cat => !editingCategory || cat.id !== editingCategory.id)
-                    .map(cat => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
+                <div className="data-table-container">
+                    {isLoading ? (
+                        <div className="empty-state"><div className="spinner"></div><p className="mt-4 text-text-muted text-sm">Loading categories...</p></div>
+                    ) : categories.length === 0 ? (
+                        <div className="empty-state">
+                            <div className="empty-state-icon">📁</div>
+                            <div className="empty-state-title">No categories yet</div>
+                            <div className="empty-state-desc">Create your first category to organize products.</div>
+                        </div>
+                    ) : (
+                        <>
+                            <table className="wb-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Parent</th>
+                                        <th>Description</th>
+                                        <th>Status</th>
+                                        <th className="text-right px-4">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {categories.map(c => (
+                                        <tr key={c.id}>
+                                            <td><span className="product-name-wb">{c.name}</span></td>
+                                            <td><span className="text-xs font-semibold text-secondary">{c.parent_name || 'Root'}</span></td>
+                                            <td><div className="text-sm text-text-muted truncate max-w-xs">{c.description || '—'}</div></td>
+                                            <td><span className={`status-pill ${c.is_active ? 'status-success-wb' : 'status-danger-wb'}`}>{c.is_active ? 'Active' : 'Inactive'}</span></td>
+                                            <td className="px-4">
+                                                <div className="action-row-wb">
+                                                    <button className="icon-action-btn" title="Edit" onClick={() => handleEdit(c)}>✏️</button>
+                                                    <button className="icon-action-btn delete" title="Delete" onClick={() => { if(window.confirm('Delete this category?')) deleteMutation.mutate(c.id); }}>🗑️</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="pagination-wb">
+                                <div className="pagination-info">Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, totalCount)} of {totalCount}</div>
+                                <div className="pagination-controls-wb">
+                                    <button className="page-btn-wb" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button>
+                                    {[...Array(totalPages)].map((_, i) => {
+                                        const p = i + 1;
+                                        if (p === 1 || p === totalPages || (p >= page - 2 && p <= page + 2)) return <button key={p} className={`page-btn-wb ${page === p ? 'active' : ''}`} onClick={() => setPage(p)}>{p}</button>;
+                                        if (p === page - 3 || p === page + 3) return <span key={p} className="px-1 text-text-muted">…</span>;
+                                        return null;
+                                    })}
+                                    <button className="page-btn-wb" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Description</label>
-              <textarea
-                name="description"
-                className="form-textarea"
-                rows="3"
-                value={formData.description}
-                onChange={handleInputChange}
-              />
-            </div>
-            <div className="form-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  name="is_active"
-                  checked={formData.is_active}
-                  onChange={handleInputChange}
-                />
-                Active
-              </label>
-            </div>
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary">
-                {editingCategory ? 'Update' : 'Create'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => setShowForm(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="filters">
-        <input
-          type="text"
-          className="search-input"
-          placeholder="Search categories..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-        />
-        <select
-          className="filter-select"
-          value={parentFilter}
-          onChange={e => setParentFilter(e.target.value)}
-        >
-          <option value="">All Parents</option>
-          {categories.filter(c => !c.parent).map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={showActiveOnly}
-            onChange={e => setShowActiveOnly(e.target.checked)}
-          />
-          Active Only
-        </label>
-        <div className="view-toggle">
-          <button 
-            className={`btn btn-sm ${viewMode === 'table' ? 'active' : ''}`}
-            onClick={() => setViewMode('table')}
-          >
-            📋 Table
-          </button>
-          <button 
-            className={`btn btn-sm ${viewMode === 'tree' ? 'active' : ''}`}
-            onClick={() => setViewMode('tree')}
-          >
-            🌳 Tree
-          </button>
-        </div>
-        <button className="btn btn-outline btn-sm" onClick={clearFilters}>
-          Clear
-        </button>
-      </div>
-
-      {/* Content */}
-      {viewMode === 'tree' ? (
-        <div className="tree-container">
-          <CategoryTree categories={filteredCategories} />
-        </div>
-      ) : (
-        <div className="table-container">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    checked={selectedCategories.length === filteredCategories.length && filteredCategories.length > 0}
-                    onChange={e => handleSelectAll(e.target.checked)}
-                  />
-                </th>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Parent</th>
-                <th>Products</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCategories.length === 0 ? (
-                <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>
-                    No categories found.
-                  </td>
-                </tr>
-              ) : (
-                filteredCategories.map((category) => (
-                  <tr key={category.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedCategories.includes(category.id)}
-                        onChange={e => handleSelectCategory(category.id, e.target.checked)}
-                      />
-                    </td>
-                    <td>{category.name}</td>
-                    <td>{category.description || '-'}</td>
-                    <td>{category.parent_name || '-'}</td>
-                    <td>
-                      <span className="product-count">
-                        {category.product_count || 0}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        className={`status-toggle ${category.is_active ? 'active' : 'inactive'}`}
-                        onClick={() => toggleCategoryStatus(category.id)}
-                      >
-                        {category.is_active ? '✓ Active' : '✗ Inactive'}
-                      </button>
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <button
-                          className="btn-icon"
-                          onClick={() => handleEdit(category)}
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          className="btn-icon"
-                          onClick={() => handleDuplicate(category)}
-                          title="Duplicate"
-                        >
-                          📋
-                        </button>
-                        <button
-                          className="btn-icon"
-                          onClick={() => handleDelete(category.id)}
-                          title="Delete"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Layout>
-  );
+        </Layout>
+    );
 };
 
 export default Categories;

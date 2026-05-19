@@ -1,641 +1,287 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Layout from '../components/Layout';
 import { purchaseOrderAPI, supplierAPI, productAPI, handleApiError } from '../services/api';
-import './PurchaseOrders.css';
+import './Products.css';
+import './Sales.css';
 
 const PurchaseOrders = () => {
-  const [orders, setOrders] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [editingOrder, setEditingOrder] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSupplier, setSelectedSupplier] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [selectedOrders, setSelectedOrders] = useState([]);
-  const [showBulkActions, setShowBulkActions] = useState(false);
-  const [formData, setFormData] = useState({
-    supplier: '',
-    expected_date: '',
-    notes: '',
-    shipping_cost: 0,
-    tax: 0,
-    items: [{ product: '', quantity: 1, unit_price: '' }],
-  });
+    const queryClient = useQueryClient();
+    const [wizardStep, setWizardStep] = useState(1);
+    const [showWizard, setShowWizard] = useState(false);
+    const [page, setPage] = useState(1);
+    const limit = 20;
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  useEffect(() => {
-    setShowBulkActions(selectedOrders.length > 0);
-  }, [selectedOrders]);
-
-  const fetchData = async () => {
-    try {
-      setError(null);
-      const [ordersRes, suppliersRes, productsRes] = await Promise.all([
-        purchaseOrderAPI.getAll(),
-        supplierAPI.getAll(),
-        productAPI.getAll(),
-      ]);
-      setOrders(ordersRes.data.results || ordersRes.data || []);
-      setSuppliers(suppliersRes.data.results || suppliersRes.data || []);
-      setProducts(productsRes.data.results || productsRes.data || []);
-    } catch (err) {
-      const apiError = handleApiError(err);
-      setError(apiError.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleItemChange = (index, field, value) => {
-    const updatedItems = [...formData.items];
-    updatedItems[index][field] = value;
-    setFormData({ ...formData, items: updatedItems });
-  };
-
-  const addItem = () => {
-    setFormData({
-      ...formData,
-      items: [...formData.items, { product: '', quantity: 1, unit_price: '' }],
+    const [formData, setFormData] = useState({
+        supplier: '',
+        expected_date: '',
+        notes: '',
+        shipping_cost: 0,
+        tax: 0,
+        items: [{ product: '', quantity: 1, unit_price: 0 }],
     });
-  };
 
-  const removeItem = (index) => {
-    const updatedItems = formData.items.filter((_, i) => i !== index);
-    setFormData({ ...formData, items: updatedItems });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = {
-        supplier: Array.isArray(formData.supplier) ? formData.supplier[0] : formData.supplier,
-        expected_date: Array.isArray(formData.expected_date) ? formData.expected_date[0] : formData.expected_date,
-        notes: Array.isArray(formData.notes) ? formData.notes[0] : formData.notes,
-        shipping_cost: parseFloat(formData.shipping_cost) || 0,
-        tax: parseFloat(formData.tax) || 0,
-        items: formData.items.map(item => ({
-          product: Array.isArray(item.product) ? item.product[0] : item.product,
-          quantity: parseInt(item.quantity),
-          unit_price: parseFloat(item.unit_price)
-        }))
-      };
-      
-      if (editingOrder) {
-        await purchaseOrderAPI.update(editingOrder.id, payload);
-      } else {
-        await purchaseOrderAPI.create(payload);
-      }
-      
-      setShowForm(false);
-      setEditingOrder(null);
-      resetForm();
-      fetchData();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      supplier: '',
-      expected_date: '',
-      notes: '',
-      shipping_cost: 0,
-      tax: 0,
-      items: [{ product: '', quantity: 1, unit_price: '' }],
+    const { data: ordersRes, isLoading: ordersLoading } = useQuery({
+        queryKey: ['purchase-orders', page],
+        queryFn: () => purchaseOrderAPI.getAll(page, limit),
+        keepPreviousData: true,
     });
-  };
 
-  const handleEdit = (order) => {
-    setEditingOrder(order);
-    setFormData({
-      supplier: order.supplier || '',
-      expected_date: order.expected_date ? order.expected_date.split('T')[0] : '',
-      notes: order.notes || '',
-      shipping_cost: order.shipping_cost || 0,
-      tax: order.tax || 0,
-      items: order.items?.length > 0 ? order.items.map(item => ({
-        product: item.product,
-        quantity: item.quantity,
-        unit_price: item.unit_price
-      })) : [{ product: '', quantity: 1, unit_price: '' }],
+    const { data: suppliersRes } = useQuery({ queryKey: ['suppliers-minimal'], queryFn: () => supplierAPI.getAll({ limit: 1000 }) });
+    const { data: productsRes } = useQuery({ queryKey: ['products-minimal'], queryFn: () => productAPI.getAll({ limit: 1000 }) });
+
+    const orders = ordersRes?.data?.results || ordersRes?.data || [];
+    const totalCount = ordersRes?.data?.count || 0;
+    const totalPages = Math.ceil(totalCount / limit);
+    const suppliers = suppliersRes?.data?.results || suppliersRes?.data || [];
+    const products = productsRes?.data?.results || productsRes?.data || [];
+
+    const createMutation = useMutation({
+        mutationFn: (data) => purchaseOrderAPI.create(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['purchase-orders']);
+            setShowWizard(false);
+            setWizardStep(1);
+            resetForm();
+        },
+        onError: (err) => alert(`Action Failed: ${handleApiError(err).message}`)
     });
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this purchase order?')) return;
-    try {
-      await purchaseOrderAPI.delete(id);
-      fetchData();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const handleStatusChange = async (orderId, newStatus) => {
-    try {
-      await purchaseOrderAPI.update(orderId, { status: newStatus });
-      fetchData();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const handleSelectOrder = (orderId) => {
-    setSelectedOrders(prev => 
-      prev.includes(orderId)
-        ? prev.filter(id => id !== orderId)
-        : [...prev, orderId]
-    );
-  };
-
-  const handleSelectAll = () => {
-    if (selectedOrders.length === filteredOrders.length) {
-      setSelectedOrders([]);
-    } else {
-      setSelectedOrders(filteredOrders.map(o => o.id));
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (!window.confirm(`Delete ${selectedOrders.length} orders?`)) return;
-    try {
-      await Promise.all(selectedOrders.map(id => purchaseOrderAPI.delete(id)));
-      setSelectedOrders([]);
-      fetchData();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const handleBulkStatusChange = async (newStatus) => {
-    try {
-      await Promise.all(selectedOrders.map(id => 
-        purchaseOrderAPI.update(id, { status: newStatus })
-      ));
-      setSelectedOrders([]);
-      fetchData();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const exportToCSV = () => {
-    const headers = ['Order Number', 'Supplier', 'Status', 'Order Date', 'Expected Date', 'Total Amount'];
-    const csvData = filteredOrders.map(o => [
-      o.order_number,
-      o.supplier_name,
-      o.status_display,
-      new Date(o.order_date).toLocaleDateString(),
-      o.expected_date ? new Date(o.expected_date).toLocaleDateString() : '',
-      `$${o.total_amount}`
-    ]);
-    
-    const csvContent = [headers, ...csvData]
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'purchase-orders.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const clearFilters = () => {
-    setSearchTerm('');
-    setSelectedSupplier('');
-    setSelectedStatus('');
-  };
-
-  const handleReceive = async (orderId, itemId, quantity) => {
-    try {
-      await purchaseOrderAPI.receiveItem(orderId, itemId, quantity);
-      fetchData();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const handleReceiveAll = async (orderId) => {
-    try {
-      await purchaseOrderAPI.receiveAll(orderId);
-      fetchData();
-    } catch (err) {
-      const apiError = handleApiError(err);
-      alert(`Error: ${apiError.message}`);
-    }
-  };
-
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          order.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesSupplier = selectedSupplier === '' || order.supplier == selectedSupplier;
-    const matchesStatus = selectedStatus === '' || order.status === selectedStatus;
-    return matchesSearch && matchesSupplier && matchesStatus;
-  });
-
-  const getStatusBadge = (status) => {
-    const badges = {
-      draft: 'badge-secondary',
-      sent: 'badge-info',
-      confirmed: 'badge-primary',
-      shipped: 'badge-warning',
-      received: 'badge-success',
-      cancelled: 'badge-danger',
+    const resetForm = () => {
+        setFormData({
+            supplier: '', expected_date: '', notes: '',
+            shipping_cost: 0, tax: 0,
+            items: [{ product: '', quantity: 1, unit_price: 0 }],
+        });
     };
-    return badges[status] || 'badge-secondary';
-  };
 
-  if (loading) {
+    const handleItemChange = (index, field, value) => {
+        const newItems = [...formData.items];
+        newItems[index] = { ...newItems[index], [field]: value };
+        setFormData(prev => ({ ...prev, items: newItems }));
+    };
+
+    const addItem = () => {
+        setFormData(prev => ({ ...prev, items: [...prev.items, { product: '', quantity: 1, unit_price: 0 }] }));
+    };
+
+    const removeItem = (index) => {
+        setFormData(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== index) }));
+    };
+
+    const calculateTotal = () => {
+        const subtotal = formData.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+        return subtotal + parseFloat(formData.shipping_cost || 0) + parseFloat(formData.tax || 0);
+    };
+
+    const receiveMutation = useMutation({
+        mutationFn: (id) => purchaseOrderAPI.receiveAll(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['purchase-orders']);
+            alert('Order successfully marked as received!');
+        },
+        onError: (err) => alert(`Action Failed: ${handleApiError(err).message}`)
+    });
+
+    const handleReceiveOrder = (id) => {
+        if (window.confirm('Are you sure you want to mark all items in this order as received? This will update your inventory quantities.')) {
+            receiveMutation.mutate(id);
+        }
+    };
+
     return (
-      <Layout>
-        <div className="loading-container">
-          <div className="spinner"></div>
-          <p>Loading purchase orders...</p>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="alert alert-danger">{error}</div>
-      </Layout>
-    );
-  }
-
-  return (
-    <Layout>
-      <div className="page-header">
-        <div>
-          <h1>Purchase Orders</h1>
-          <p>Manage orders to suppliers ({filteredOrders.length} orders)</p>
-        </div>
-        <div className="header-actions">
-          <button className="btn btn-outline" onClick={exportToCSV}>
-            📊 Export CSV
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setShowForm(!showForm);
-              setEditingOrder(null);
-              resetForm();
-            }}
-          >
-            {showForm ? '✕ Close' : '+ New Purchase Order'}
-          </button>
-        </div>
-      </div>
-
-      {showForm && (
-        <div className="card form-card">
-          <h3>{editingOrder ? 'Edit Purchase Order' : 'Create Purchase Order'}</h3>
-          <form onSubmit={handleSubmit}>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Supplier *</label>
-                <select
-                  name="supplier"
-                  className="form-select"
-                  value={formData.supplier}
-                  onChange={handleInputChange}
-                  required
-                >
-                  <option value="">Select Supplier</option>
-                  {suppliers.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Expected Date</label>
-                <input
-                  type="date"
-                  name="expected_date"
-                  className="form-input"
-                  value={formData.expected_date}
-                  onChange={handleInputChange}
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Items *</label>
-              <div className="items-container">
-                {formData.items.map((item, index) => (
-                  <div key={index} className="item-row">
-                    <select
-                      className="form-select"
-                      value={item.product}
-                      onChange={(e) => handleItemChange(index, 'product', e.target.value)}
-                      required
-                    >
-                      <option value="">Select Product</option>
-                      {products.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} - {p.sku}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      className="form-input"
-                      placeholder="Quantity"
-                      value={item.quantity}
-                      onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                      min="1"
-                      required
-                    />
-                    <input
-                      type="number"
-                      className="form-input"
-                      placeholder="Unit Price"
-                      value={item.unit_price}
-                      onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
-                      min="0"
-                      step="0.01"
-                      required
-                    />
-                    <span className="item-total">
-                      ${((item.quantity || 0) * (item.unit_price || 0)).toFixed(2)}
-                    </span>
-                    {formData.items.length > 1 && (
-                      <button
-                        type="button"
-                        className="btn-icon btn-danger"
-                        onClick={() => removeItem(index)}
-                        title="Remove Item"
-                      >
-                        🗑️
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  onClick={addItem}
-                >
-                  + Add Item
-                </button>
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Shipping Cost</label>
-                <input
-                  type="number"
-                  name="shipping_cost"
-                  className="form-input"
-                  value={formData.shipping_cost}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Tax</label>
-                <input
-                  type="number"
-                  name="tax"
-                  className="form-input"
-                  value={formData.tax}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Notes</label>
-              <textarea
-                name="notes"
-                className="form-textarea"
-                rows="3"
-                value={formData.notes}
-                onChange={handleInputChange}
-                placeholder="Additional notes for this order..."
-              />
-            </div>
-
-            <div className="order-summary">
-              <div className="summary-row">
-                <span>Subtotal:</span>
-                <span>${formData.items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0).toFixed(2)}</span>
-              </div>
-              <div className="summary-row">
-                <span>Shipping:</span>
-                <span>${(formData.shipping_cost || 0)}</span>
-              </div>
-              <div className="summary-row">
-                <span>Tax:</span>
-                <span>${(formData.tax || 0)}</span>
-              </div>
-              <div className="summary-row total">
-                <span>Total:</span>
-                <span>${(formData.items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0) + parseFloat(formData.shipping_cost || 0) + parseFloat(formData.tax || 0)).toFixed(2)}</span>
-              </div>
-            </div>
-
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary">
-                {editingOrder ? 'Update Order' : 'Create Order'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingOrder(null);
-                  resetForm();
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="filters">
-        <input
-          type="text"
-          className="search-input"
-          placeholder="Search by order number or supplier"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-        <select
-          className="filter-select"
-          value={selectedSupplier}
-          onChange={(e) => setSelectedSupplier(e.target.value)}
-        >
-          <option value="">All Suppliers</option>
-          {suppliers.map(s => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-        <select
-          className="filter-select"
-          value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-        >
-          <option value="">All Status</option>
-          <option value="draft">Draft</option>
-          <option value="sent">Sent</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="shipped">Shipped</option>
-          <option value="partial">Partially Received</option>
-          <option value="received">Fully Received</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-        <button className="btn btn-outline btn-sm" onClick={clearFilters}>
-          Clear Filters
-        </button>
-      </div>
-
-      {showBulkActions && (
-        <div className="bulk-actions">
-          <span>{selectedOrders.length} orders selected</span>
-          <div className="bulk-buttons">
-            <button className="btn btn-sm btn-primary" onClick={() => handleBulkStatusChange('confirmed')}>
-              Mark Confirmed
-            </button>
-            <button className="btn btn-sm btn-warning" onClick={() => handleBulkStatusChange('cancelled')}>
-              Cancel Orders
-            </button>
-            <button className="btn btn-sm btn-danger" onClick={handleBulkDelete}>
-              Delete
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="table-container">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
-                  onChange={handleSelectAll}
-                />
-              </th>
-              <th>Order #</th>
-              <th>Supplier</th>
-              <th>Status</th>
-              <th>Order Date</th>
-              <th>Expected Date</th>
-              <th>Total</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredOrders.length === 0 ? (
-              <tr>
-                <td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>
-                  No purchase orders found.
-                </td>
-              </tr>
-            ) : (
-              filteredOrders.map((order) => (
-                <tr key={order.id} className={selectedOrders.includes(order.id) ? 'selected' : ''}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selectedOrders.includes(order.id)}
-                      onChange={() => handleSelectOrder(order.id)}
-                    />
-                  </td>
-                  <td>
-                    <strong>{order.order_number}</strong>
-                  </td>
-                  <td>{order.supplier_name}</td>
-                  <td>
-                    <select
-                      className={`status-select ${getStatusBadge(order.status)}`}
-                      value={order.status}
-                      onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="shipped">Shipped</option>
-                      <option value="partial">Partially Received</option>
-                      <option value="received">Fully Received</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </td>
-                  <td>{new Date(order.order_date).toLocaleDateString()}</td>
-                  <td>
-                    {order.expected_date ? new Date(order.expected_date).toLocaleDateString() : '-'}
-                  </td>
-                  <td>${order.total_amount}</td>
-                  <td>
-                    <div className="action-buttons">
-                      <button
-                        className="btn-icon"
-                        onClick={() => handleEdit(order)}
-                        title="Edit"
-                      >
-                        ✏️
-                      </button>
-                      {order.status !== 'received' && order.items?.some(item => item.quantity_received < item.quantity) && (
-                        <button
-                          className="btn-icon btn-success"
-                          onClick={() => handleReceiveAll(order.id)}
-                          title="Receive All"
-                        >
-                          📦
-                        </button>
-                      )}
-                      <button
-                        className="btn-icon"
-                        onClick={() => handleDelete(order.id)}
-                        title="Delete"
-                      >
-                        🗑️
-                      </button>
+        <Layout>
+            <div className="products-page">
+                <header className="page-header-wb">
+                    <div className="header-title-area">
+                        <h1>Purchase <span className="text-primary">Orders</span></h1>
+                        <p className="text-secondary">{totalCount} orders in progress</p>
                     </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </Layout>
-  );
+                    <button className="btn-workbench btn-primary-wb" onClick={() => { setShowWizard(!showWizard); setWizardStep(1); }}>
+                        {showWizard ? '✕ Cancel' : '➕ New Purchase Order'}
+                    </button>
+                </header>
+
+                {showWizard && (
+                    <div className="wizard-container animate-entrance">
+                        <div className="wizard-header">
+                            <span className="text-sm font-bold opacity-60 uppercase tracking-wider">New Purchase Order</span>
+                            <div className="wizard-steps-indicator">
+                                <div className={`step-bubble ${wizardStep >= 1 ? 'active' : ''} ${wizardStep > 1 ? 'complete' : ''}`}>1</div>
+                                <div className="step-line"></div>
+                                <div className={`step-bubble ${wizardStep >= 2 ? 'active' : ''} ${wizardStep > 2 ? 'complete' : ''}`}>2</div>
+                                <div className="step-line"></div>
+                                <div className={`step-bubble ${wizardStep >= 3 ? 'active' : ''}`}>3</div>
+                            </div>
+                        </div>
+
+                        <div className="wizard-body">
+                            {wizardStep === 1 && (
+                                <div>
+                                    <span className="step-title-wb">Supplier & Delivery</span>
+                                    <span className="step-desc-wb">Select supplier and expected delivery date.</span>
+                                    <div className="wizard-form-grid">
+                                        <div className="form-group-wb">
+                                            <label className="label-wb">Primary Supplier</label>
+                                            <select className="input-wb" value={formData.supplier} onChange={e => setFormData({...formData, supplier: e.target.value})}>
+                                                <option value="">Select a partner...</option>
+                                                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="form-group-wb">
+                                            <label className="label-wb">Expected Arrival</label>
+                                            <input type="date" className="input-wb" value={formData.expected_date} onChange={e => setFormData({...formData, expected_date: e.target.value})} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {wizardStep === 2 && (
+                                <div>
+                                    <span className="step-title-wb">Line Items</span>
+                                    <span className="step-desc-wb">Products to be ordered.</span>
+                                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                                        {formData.items.map((item, idx) => (
+                                            <div key={idx} className="flex gap-4 items-end bg-secondary-light p-4 rounded-lg">
+                                                <div className="flex-1">
+                                                    <label className="label-wb mb-2 block">Product</label>
+                                                    <select className="input-wb w-full" value={item.product} onChange={e => handleItemChange(idx, 'product', e.target.value)}>
+                                                        <option value="">Select product...</option>
+                                                        {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="w-24">
+                                                    <label className="label-wb mb-2 block">Qty</label>
+                                                    <input type="number" className="input-wb w-full" value={item.quantity} onChange={e => handleItemChange(idx, 'quantity', e.target.value)} />
+                                                </div>
+                                                <div className="w-32">
+                                                    <label className="label-wb mb-2 block">Unit Cost</label>
+                                                    <input type="number" className="input-wb w-full" value={item.unit_price} onChange={e => handleItemChange(idx, 'unit_price', e.target.value)} />
+                                                </div>
+                                                <button className="icon-action-btn delete" onClick={() => removeItem(idx)}>✕</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button className="btn-workbench btn-secondary-wb w-full mt-4 border-dashed" onClick={addItem}>+ Add Line Item</button>
+                                </div>
+                            )}
+
+                            {wizardStep === 3 && (
+                                <div>
+                                    <span className="step-title-wb">Review & Submit</span>
+                                    <span className="step-desc-wb">Final costs and order summary.</span>
+                                    <div className="wizard-form-grid mb-6">
+                                        <div className="form-group-wb">
+                                            <label className="label-wb">Shipping Cost</label>
+                                            <input type="number" className="input-wb" value={formData.shipping_cost} onChange={e => setFormData({...formData, shipping_cost: e.target.value})} />
+                                        </div>
+                                        <div className="form-group-wb">
+                                            <label className="label-wb">Tax</label>
+                                            <input type="number" className="input-wb" value={formData.tax} onChange={e => setFormData({...formData, tax: e.target.value})} />
+                                        </div>
+                                    </div>
+                                    <div className="review-summary-wb">
+                                        <div className="review-row">
+                                            <span className="review-label">Supplier</span>
+                                            <span className="review-value">{suppliers.find(s => s.id.toString() === formData.supplier)?.name || 'N/A'}</span>
+                                        </div>
+                                        <div className="review-row">
+                                            <span className="review-label">Items</span>
+                                            <span className="review-value">{formData.items.length} Line Items</span>
+                                        </div>
+                                        <div className="total-review-wb">
+                                            <span className="total-label-wb">Order Total</span>
+                                            <span className="total-value-wb">${calculateTotal().toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="wizard-footer">
+                            <button className="btn-workbench btn-secondary-wb" disabled={wizardStep === 1} onClick={() => setWizardStep(wizardStep - 1)}>Previous</button>
+                            {wizardStep < 3 ? (
+                                <button 
+                                    className="btn-workbench btn-primary-wb" 
+                                    onClick={() => setWizardStep(wizardStep + 1)}
+                                    disabled={
+                                        (wizardStep === 1 && (!formData.supplier || !formData.expected_date)) ||
+                                        (wizardStep === 2 && (formData.items.length === 0 || formData.items.some(item => !item.product || item.quantity <= 0)))
+                                    }
+                                >Next Step</button>
+                            ) : (
+                                <button className="btn-workbench btn-primary-wb" onClick={() => createMutation.mutate(formData)} disabled={createMutation.isPending}>
+                                    Submit Order
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <div className="data-table-container">
+                    {ordersLoading ? (
+                        <div className="flex flex-col items-center justify-center py-32">
+                            <div className="spinner"></div>
+                            <p className="mt-4 text-text-muted text-sm">Loading orders...</p>
+                        </div>
+                    ) : (
+                        <>
+                            <table className="wb-table">
+                                <thead>
+                                    <tr>
+                                        <th>Order #</th>
+                                        <th>Supplier</th>
+                                        <th>Status</th>
+                                        <th>Total</th>
+                                        <th className="text-right px-4">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {orders.map(o => (
+                                        <tr key={o.id}>
+                                            <td><span className="invoice-id-wb">{o.order_number}</span></td>
+                                            <td><span className="product-name-wb">{o.supplier_name}</span></td>
+                                            <td>
+                                                <span className={`status-pill ${o.status === 'received' ? 'status-success-wb' : 'status-warning-wb'}`}>
+                                                    {o.status.toUpperCase()}
+                                                </span>
+                                            </td>
+                                            <td><div className="text-sm font-black text-primary">${parseFloat(o.total_amount).toLocaleString()}</div></td>
+                                            <td className="px-4">
+                                                <div className="action-row-wb justify-end gap-2 flex">
+                                                    {o.status !== 'received' && (
+                                                        <button 
+                                                            className="btn-workbench btn-secondary-wb text-xs px-2 py-1" 
+                                                            onClick={() => handleReceiveOrder(o.id)}
+                                                            disabled={receiveMutation.isPending}
+                                                            title="Mark as Received"
+                                                        >
+                                                            ✓ Mark Received
+                                                        </button>
+                                                    )}
+                                                    <button className="icon-action-btn" title="View Details">👁️</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="pagination-wb">
+                                <div className="pagination-info">Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, totalCount)} of {totalCount} orders</div>
+                                <div className="pagination-controls-wb">
+                                    <button className="page-btn-wb" disabled={page === 1} onClick={() => setPage(page - 1)}>Prev</button>
+                                    {[...Array(totalPages)].map((_, i) => (
+                                        <button key={i+1} className={`page-btn-wb ${page === i+1 ? 'active' : ''}`} onClick={() => setPage(i+1)}>{i+1}</button>
+                                    )).slice(Math.max(0, page - 3), Math.min(totalPages, page + 2))}
+                                    <button className="page-btn-wb" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+        </Layout>
+    );
 };
 
 export default PurchaseOrders;

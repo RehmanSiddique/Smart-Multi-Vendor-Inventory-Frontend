@@ -18,7 +18,7 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
+
     // Debug: Log request data for POST requests
     if (config.method === 'post' && config.url.includes('/products/')) {
       console.log('🚀 API Request Debug:', {
@@ -29,7 +29,7 @@ api.interceptors.request.use(
         categoryType: config.data?.category ? typeof config.data.category : 'undefined'
       });
     }
-    
+
     return config;
   },
   (error) => {
@@ -45,25 +45,25 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
-    
-    // If error is 401 and not already retrying
-    if (error.response?.status === 401 && !originalRequest._retry) {
+
+    // If error is 401 and not already retrying, and it's not a login request itself
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/auth/login/')) {
       originalRequest._retry = true;
-      
+
       try {
         const refreshToken = localStorage.getItem('refresh_token');
         if (!refreshToken) {
           throw new Error('No refresh token');
         }
-        
+
         // Try to refresh the token
         const response = await axios.post(`${API_BASE_URL}/auth/refresh/`, {
           refresh: refreshToken
         });
-        
+
         const { access } = response.data;
         localStorage.setItem('access_token', access);
-        
+
         // Retry the original request with new token
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return api(originalRequest);
@@ -72,12 +72,23 @@ api.interceptors.response.use(
         console.error('Token refresh failed:', refreshError);
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+
+        // ONLY redirect if we're not already on the login page
+        // and if it wasn't a login/refresh request itself
+        if (!window.location.pathname.includes('/login') &&
+          !originalRequest.url.includes('/auth/login/') &&
+          !originalRequest.url.includes('/auth/refresh/')) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }
-    
-    console.error(`❌ API Error: ${error.config?.url} - Status: ${error.response?.status}`, error.response?.data);
+
+    const url = error.config?.url || 'Unknown URL';
+    const status = error.response?.status || 'No Response';
+    const data = error.response?.data || error.message;
+
+    console.error(`❌ API Error [${url}] - Status: ${status}`, data);
     return Promise.reject(error);
   }
 );
@@ -86,8 +97,17 @@ api.interceptors.response.use(
 // AUTHENTICATION APIS
 // ============================================================
 export const authAPI = {
-  login: (email, password) => api.post('/auth/login/', { email, password }),
+  login: (email, password) => {
+    // Send both email and username to be robust across different backend configurations
+    return api.post('/auth/login/', {
+      email: email,
+      username: email,
+      password: password
+    });
+  },
   register: (userData) => api.post('/auth/register/', userData),
+  forgotPassword: (email) => api.post('/auth/forgot-password/', { email }),
+  resetPassword: (email, code, new_password) => api.post('/auth/reset-password/', { email, code, new_password }),
   refresh: (refresh) => api.post('/auth/refresh/', { refresh }),
   verify: (token) => api.post('/auth/verify/', { token }),
   getProfile: () => api.get('/accounts/users/me/'),
@@ -151,10 +171,10 @@ export const purchaseOrderAPI = {
   create: (data) => api.post('/inventory/purchase-orders/', data),
   update: (id, data) => api.put(`/inventory/purchase-orders/${id}/`, data),
   delete: (id) => api.delete(`/inventory/purchase-orders/${id}/`),
-  receiveItem: (id, itemId, quantity) => 
-    api.post(`/inventory/purchase-orders/${id}/receive_item/`, { 
-      item_id: itemId, 
-      quantity: quantity 
+  receiveItem: (id, itemId, quantity) =>
+    api.post(`/inventory/purchase-orders/${id}/receive_item/`, {
+      item_id: itemId,
+      quantity: quantity
     }),
   receiveAll: (id) => api.post(`/inventory/purchase-orders/${id}/receive_all/`),
 };
@@ -193,6 +213,19 @@ export const reportAPI = {
 };
 
 // ============================================================
+// NOTIFICATION APIS
+// ============================================================
+export const notificationAPI = {
+  getAll: (params = {}) => api.get('/inventory/notifications/', { params }),
+  getById: (id) => api.get(`/inventory/notifications/${id}/`),
+  markRead: (id) => api.patch(`/inventory/notifications/${id}/mark_read/`),
+  markAllRead: () => api.patch('/inventory/notifications/mark_all_read/'),
+  unreadCount: () => api.get('/inventory/notifications/unread_count/'),
+  delete: (id) => api.delete(`/inventory/notifications/${id}/`),
+  clearAll: () => api.delete('/inventory/notifications/clear_all/'),
+};
+
+// ============================================================
 // DASHBOARD APIS (Combined for efficiency)
 // ============================================================
 export const dashboardAPI = {
@@ -203,7 +236,7 @@ export const dashboardAPI = {
         productAPI.getLowStock(),
         saleAPI.getToday(),
       ]);
-      
+
       return {
         products: products.data,
         lowStock: lowStock.data,
@@ -214,15 +247,29 @@ export const dashboardAPI = {
       throw error;
     }
   },
+  seedSampleData: () => api.post('/inventory/seed-sample-data/'),
 };
 
 // Helper function to handle API errors
 export const handleApiError = (error) => {
   if (error.response) {
     // Server responded with error
+    let message = error.response.data?.detail || error.response.data?.message || error.response.data?.error;
+    
+    // Handle Django REST Framework field validation errors (which are objects with arrays of strings)
+    if (!message && typeof error.response.data === 'object' && Object.keys(error.response.data).length > 0) {
+        const firstKey = Object.keys(error.response.data)[0];
+        const firstError = error.response.data[firstKey];
+        if (Array.isArray(firstError)) {
+            message = `${firstKey.charAt(0).toUpperCase() + firstKey.slice(1)}: ${firstError[0]}`;
+        } else if (typeof firstError === 'string') {
+            message = `${firstKey}: ${firstError}`;
+        }
+    }
+    
     return {
       status: error.response.status,
-      message: error.response.data?.detail || error.response.data?.message || 'An error occurred',
+      message: message || 'An error occurred',
       data: error.response.data,
     };
   } else if (error.request) {

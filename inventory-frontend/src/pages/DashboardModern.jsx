@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { productAPI, saleAPI, handleApiError } from '../services/api';
+import { productAPI, saleAPI, reportAPI, handleApiError } from '../services/api';
 import { Link } from 'react-router-dom';
 import { 
   FiPackage, 
@@ -38,29 +38,28 @@ const DashboardModern = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [productsRes, lowStockRes, salesRes] = await Promise.all([
-        productAPI.getAll(),
-        productAPI.getLowStock(),
-        saleAPI.getToday(),
+      // Fetch summary statistics and recent lists
+      const [summaryRes, productsRes, lowStockRes, salesRes] = await Promise.all([
+        reportAPI.getDashboard(),
+        productAPI.getAll({ limit: 5 }),
+        productAPI.getLowStock({ limit: 5 }),
+        saleAPI.getAll({ limit: 5 }),
       ]);
 
-      const products = productsRes.data.results || productsRes.data || [];
-      const lowStock = lowStockRes.data.results || lowStockRes.data || [];
-      const sales = salesRes.data.results || salesRes.data || [];
-
-      const outOfStock = products.filter(p => (p.inventory?.quantity || 0) === 0).length;
-      const todayRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.total || 0), 0);
+      const summary = summaryRes.data;
+      const lowStockList = lowStockRes.data.results || lowStockRes.data || [];
+      const salesList = salesRes.data.results || salesRes.data || [];
 
       setStats({
-        totalProducts: products.length,
-        lowStock: lowStock.length,
-        outOfStock,
-        todayRevenue,
-        totalSales: sales.length,
+        totalProducts: summary.inventory.total_products,
+        lowStock: summary.inventory.low_stock,
+        outOfStock: summary.inventory.out_of_stock,
+        todayRevenue: summary.today.sales,
+        totalSales: summary.today.orders,
       });
 
-      setLowStockProducts(lowStock.slice(0, 5));
-      setRecentSales(sales.slice(0, 5));
+      setLowStockProducts(lowStockList.slice(0, 5));
+      setRecentSales(salesList.slice(0, 5));
       setError(null);
     } catch (err) {
       const apiError = handleApiError(err);
